@@ -1,4 +1,6 @@
-﻿using cAlgo.API;
+﻿using System;
+using System.Linq;
+using cAlgo.API;
 using cAlgo.API.Indicators;
 using QuiltBotUtility.Money;
 
@@ -46,6 +48,7 @@ namespace cRobots
 
         protected override void OnBar()
         {
+            TradeResult result = null;
             var position = Positions.Find(label, Symbol);
             if (position == null)
             {
@@ -81,7 +84,7 @@ namespace cRobots
                     var stopLossPip = OpenPip + StopLossPip;
 
                     var volume = moneyManager.GetOpenLongVolume(price, stopLoss);
-                    PlaceLimitOrder(TradeType.Buy, Symbol, volume, price, label, stopLossPip, null, null, InComment);
+                    result = PlaceLimitOrder(TradeType.Buy, Symbol, volume, price, label, stopLossPip, null, null, InComment);
                 }
 
                 if (IsCurSeriesBreak(emaDatas) < 0 && Is5SeriesBreak(macdDatas) < 0
@@ -93,9 +96,33 @@ namespace cRobots
                     var stopLossPip = OpenPip + StopLossPip;
 
                     var volume = moneyManager.GetOpenShortVolume(price, stopLoss);
-                    var result = PlaceLimitOrder(TradeType.Sell, Symbol, volume, price, label, stopLossPip, null, null, InComment);
+                    result = PlaceLimitOrder(TradeType.Sell, Symbol, volume, price, label, stopLossPip, null, null, InComment);
 
                     //   ExecuteMarketOrder(TradeType.Sell, Symbol, volume, label, stopLossPip, null, null, InComment);
+                }
+
+                if (result == null || result.IsSuccessful)
+                    return;
+                switch (result.Error)
+                {
+                    case ErrorCode.TechnicalError:
+                        break;
+                    case ErrorCode.BadVolume:
+                        break;
+                    case ErrorCode.NoMoney:
+                        break;
+                    case ErrorCode.MarketClosed:
+                        break;
+                    case ErrorCode.Disconnected:
+                        break;
+                    case ErrorCode.EntityNotFound:
+                        break;
+                    case ErrorCode.Timeout:
+                        break;
+                    case null:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
             else
@@ -104,7 +131,12 @@ namespace cRobots
                 {
                     if (position.StopLoss == null)
                     {
-                        ClosePosition(position);
+                        result =   ClosePosition(position);
+                        return;
+                    }
+
+                    if (PendingOrders.Any(c => c.Comment == HalfComment))
+                    {
                         return;
                     }
 
@@ -112,7 +144,7 @@ namespace cRobots
                     var volume = position.VolumeInUnits / 2;
                     double price = position.EntryPrice + position.EntryPrice - position.StopLoss.Value;
 
-                    PlaceStopOrder(tradeType, Symbol, volume, price, label, null, null, null, HalfComment);
+                    result =   PlaceStopOrder(tradeType, Symbol, volume, price, label, null, null, null, HalfComment);
                 }
                 else if (position.Comment == HalfComment)
                 {
@@ -127,11 +159,37 @@ namespace cRobots
                         stopLoss = emaData + StopLossPip * Symbol.PipSize;
                     }
 
-                    ModifyPosition(position, stopLoss, null);
+                    result =   ModifyPosition(position, stopLoss, null);
                 }
                 else
                 {
-                    ClosePosition(position);
+                    result =  ClosePosition(position);
+                }
+
+                if (result == null || result.IsSuccessful)
+                    return;
+
+
+                switch (result.Error)
+                {
+                    case ErrorCode.TechnicalError:
+                        break;
+                    case ErrorCode.BadVolume:
+                        break;
+                    case ErrorCode.NoMoney:
+                        break;
+                    case ErrorCode.MarketClosed:
+                        break;
+                    case ErrorCode.Disconnected:
+                        break;
+                    case ErrorCode.EntityNotFound:
+                        break;
+                    case ErrorCode.Timeout:
+                        break;
+                    case null:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
         }
