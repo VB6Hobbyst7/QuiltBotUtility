@@ -51,7 +51,8 @@
     <Compile Include="Money\MoneyManagerFactory.cs" />
     <Compile Include="Money\MoneyManagerType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Robots\FiveMinutesRobot.cs" />
+    <Compile Include="Robots\AllQuiltBot.cs" />
+    <Compile Include="Robots\QuiltRobot.cs" />
     <Compile Include="RobotUtil\FiveMinutesStrategy.cs" />
     <Compile Include="Trailing\DefaultTrailing.cs" />
   </ItemGroup>

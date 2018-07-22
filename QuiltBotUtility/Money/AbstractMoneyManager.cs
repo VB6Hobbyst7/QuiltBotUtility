@@ -33,9 +33,7 @@ namespace QuiltBotUtility.Money
             {
                 foreach (var position in algo.Positions)
                 {
-                    //if (position.StopLoss == null)
-                    //    throw new PositionNoStopLessException(position);
-                    if (position.EntryTime < DateTime.UtcNow.Date)
+                    if (position.EntryTime < algo.Server.Time.Date)
                         continue;
 
                     var symbol = algo.MarketData.GetSymbol(position.SymbolCode);
@@ -44,18 +42,21 @@ namespace QuiltBotUtility.Money
                     {
                         var loss = Math.Abs((position.EntryPrice - position.StopLoss.Value) / symbol.PipSize *
                                             symbol.PipValue * position.VolumeInUnits);
-                        if (position.EntryTime >= DateTime.UtcNow.Date)
-                            todayLoss += loss;
+                        todayLoss += loss;
                     }
                 }
             }
 
             var thisLoss = Math.Abs((price - stopLoss) / algo.Symbol.PipSize * algo.Symbol.PipValue * volume);
             todayLoss += thisLoss;
-            todayLoss += algo.History.Where(c => c.EntryTime >= DateTime.UtcNow.Date)
+            todayLoss += algo.History.Where(c => c.EntryTime >= algo.Server.Time.Date)
                              .Where(c => c.ClosingDealId > 0)
                              .Sum(c => c.NetProfit);
-
+            var result = !(todayLoss >= OneDayMaxLoss);
+            if (!result)
+            {
+                algo.Print(algo.Server.Time);
+            }
             return !(todayLoss >= OneDayMaxLoss);
         }
     }
