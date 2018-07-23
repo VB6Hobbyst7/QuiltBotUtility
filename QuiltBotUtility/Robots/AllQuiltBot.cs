@@ -51,9 +51,6 @@ namespace cAlgo.Robots
 
         protected override void OnBar()
         {
-            var position = Positions.Find(label, Symbol);
-            // if (position == null)
-
             var curLable = label + Server.Time.ToBinary();
 
             var emaDatas = new double[6];
@@ -77,17 +74,16 @@ namespace cAlgo.Robots
                 macdDatas[i - 1] = macdData;
             }
 
-
             if (IsCurSeriesBreak(emaDatas) > 0 && Is5SeriesBreak(macdDatas) > 0 || IsCurSeriesBreak(macdDatas) > 0 && Is5SeriesBreak(emaDatas) > 0)
             {
-                var volume = moneyManager.GetOpenLongVolume(Symbol.Ask, Symbol.Ask - OpenStopLossPip* Symbol.PipSize);
+                var volume = moneyManager.GetOpenLongVolume(Symbol.Ask, Symbol.Ask - OpenStopLossPip * Symbol.PipSize);
                 ExecuteMarketOrderAsync(TradeType.Buy, Symbol, volume / 2, curLable, OpenStopLossPip, null, null, InComment);
                 ExecuteMarketOrderAsync(TradeType.Buy, Symbol, volume / 2, curLable, OpenStopLossPip, null, null, HalfComment);
             }
 
             if (IsCurSeriesBreak(emaDatas) < 0 && Is5SeriesBreak(macdDatas) < 0 || IsCurSeriesBreak(macdDatas) < 0 && Is5SeriesBreak(emaDatas) < 0)
             {
-                var volume = moneyManager.GetOpenShortVolume(Symbol.Bid, Symbol.Bid + OpenStopLossPip* Symbol.PipSize);
+                var volume = moneyManager.GetOpenShortVolume(Symbol.Bid, Symbol.Bid + OpenStopLossPip * Symbol.PipSize);
                 ExecuteMarketOrderAsync(TradeType.Sell, Symbol, volume / 2, curLable, OpenStopLossPip, null, null, InComment);
                 ExecuteMarketOrderAsync(TradeType.Sell, Symbol, volume / 2, curLable, OpenStopLossPip, null, null, HalfComment);
             }
@@ -97,7 +93,8 @@ namespace cAlgo.Robots
         {
             var emaData = ema.Result.Last(1);
 
-            foreach (var position in Positions.Where(c => c.SymbolCode == Symbol.Code && c.Comment == InComment))
+            var curSymbolPositions = Positions.Where(c => c.SymbolCode == Symbol.Code).ToList();
+            foreach (var position in curSymbolPositions.Where(c => c.Comment == InComment))
             {
                 if (position.StopLoss == null)
                 {
@@ -145,7 +142,7 @@ namespace cAlgo.Robots
                 }
             }
 
-            foreach (var position in Positions.Where(c => c.SymbolCode == Symbol.Code && c.Comment == HalfComment))
+            foreach (var position in curSymbolPositions.Where(c => c.Comment == HalfComment))
             {
                 if (position.StopLoss == null)
                 {
