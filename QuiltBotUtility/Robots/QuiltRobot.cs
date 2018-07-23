@@ -25,9 +25,6 @@ namespace cRobots
         public double OpenStopLossPip { get; set; }
 
         [Parameter(DefaultValue = 0)]
-        public double HalfStopLossPip { get; set; }
-
-        [Parameter(DefaultValue = 0)]
         public double EmaStopLossPip { get; set; }
 
         private string label;
@@ -45,15 +42,14 @@ namespace cRobots
         {
             macd = Indicators.MacdHistogram(MarketSeries.Close, 26, 12, 9);
             ema = Indicators.ExponentialMovingAverage(MarketSeries.Close, 20);
-            moneyManager = MoneyManagerFactory.Create(Account, this, (MoneyManagerType)MoneyManagerType, OneDayMaxLoss, Lots, Risk);
+            moneyManager = MoneyManagerFactory.Create(Account, this, (MoneyManagerType) MoneyManagerType, OneDayMaxLoss, Lots, Risk);
             label = Symbol.Code + "FiveMinutesRobot";
         }
 
         protected override void OnBar()
         {
-            TradeResult result = null;
             var position = Positions.Find(label, Symbol);
-             if (position == null)
+            if (position == null)
             {
                 var emaDatas = new double[6];
                 var macdDatas = new double[6];
@@ -76,97 +72,78 @@ namespace cRobots
                     macdDatas[i - 1] = macdData;
                 }
 
-
-                var lastEma = ema.Result.Last(1);
-
                 if (IsCurSeriesBreak(emaDatas) > 0 && Is5SeriesBreak(macdDatas) > 0 || IsCurSeriesBreak(macdDatas) > 0 && Is5SeriesBreak(emaDatas) > 0)
                 {
-                    var stopLoss = lastEma - Symbol.PipSize * OpenStopLossPip;
-
-                    var stopLossPip = OpenStopLossPip;
-
-
-                    var volume = moneyManager.GetOpenLongVolume(Symbol.Ask, stopLoss);
-                    result = ExecuteMarketOrder(TradeType.Buy, Symbol, volume / 2, label, stopLossPip, null, null, InComment);
-                    result = ExecuteMarketOrder(TradeType.Buy, Symbol, volume / 2, label, stopLossPip, null, null, HalfComment);
+                    var volume = moneyManager.GetOpenLongVolume(Symbol.Ask, Symbol.Ask - OpenStopLossPip * Symbol.PipSize);
+                    ExecuteMarketOrderAsync(TradeType.Buy, Symbol, volume / 2, label, OpenStopLossPip, null, null, InComment);
+                    ExecuteMarketOrderAsync(TradeType.Buy, Symbol, volume / 2, label, OpenStopLossPip, null, null, HalfComment);
                 }
 
                 if (IsCurSeriesBreak(emaDatas) < 0 && Is5SeriesBreak(macdDatas) < 0 || IsCurSeriesBreak(macdDatas) < 0 && Is5SeriesBreak(emaDatas) < 0)
                 {
-                    var stopLoss = lastEma + Symbol.PipSize * OpenStopLossPip;
-
-                    var stopLossPip = OpenStopLossPip;
-
-                    var volume = moneyManager.GetOpenShortVolume(Symbol.Bid, stopLoss);
-                    result = ExecuteMarketOrder(TradeType.Sell, Symbol, volume / 2, label, stopLossPip, null, null, InComment);
-                    result = ExecuteMarketOrder(TradeType.Sell, Symbol, volume / 2, label, stopLossPip, null, null, HalfComment);
-
-                    //   ExecuteMarketOrder(TradeType.Sell, Symbol, volume, label, stopLossPip, null, null, InComment);
-                }
-
-                if (result == null || result.IsSuccessful)
-                    return;
-                switch (result.Error)
-                {
-                    case ErrorCode.TechnicalError:
-                        break;
-                    case ErrorCode.BadVolume:
-                        break;
-                    case ErrorCode.NoMoney:
-                        break;
-                    case ErrorCode.MarketClosed:
-                        break;
-                    case ErrorCode.Disconnected:
-                        break;
-                    case ErrorCode.EntityNotFound:
-                        break;
-                    case ErrorCode.Timeout:
-                        break;
-                    case null:
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
+                    var volume = moneyManager.GetOpenShortVolume(Symbol.Bid, Symbol.Bid + OpenStopLossPip * Symbol.PipSize);
+                    ExecuteMarketOrderAsync(TradeType.Sell, Symbol, volume / 2, label, OpenStopLossPip, null, null, InComment);
+                    ExecuteMarketOrderAsync(TradeType.Sell, Symbol, volume / 2, label, OpenStopLossPip, null, null, HalfComment);
                 }
             }
         }
 
         protected override void OnTick()
         {
-            TradeResult result = null;
             var positions = Positions.FindAll(label, Symbol);
             if (positions == null)
             {
                 return;
             }
 
+            var emaData = ema.Result.Last(1);
+
             var position = positions.FirstOrDefault(c => c.Comment == InComment);
             if (position != null)
             {
                 if (position.StopLoss == null)
                 {
-                    result = ClosePosition(position);
+                    ClosePosition(position);
                     return;
                 }
 
-
-                if (position.TradeType == TradeType.Buy)
+                switch (position.TradeType)
                 {
-                    double price = position.EntryPrice + position.EntryPrice - position.StopLoss.Value + position.Commissions;
-
-                    if (Symbol.Bid >=price)
+                    case TradeType.Buy:
                     {
-                    ClosePosition(position);
+                        double price = position.EntryPrice + position.EntryPrice - position.StopLoss.Value - position.Commissions * 2 / position.VolumeInUnits;
 
+                        if (Symbol.Bid >= price)
+                        {
+                            ClosePositionAsync(position);
+                            var pos = Positions.FindAll(position.Label, Symbol).FirstOrDefault(c => c.Comment == HalfComment);
+                            if (pos != null)
+                            {
+                                var stopLoss = Math.Max(emaData - EmaStopLossPip * Symbol.PipSize, pos.EntryPrice - pos.Commissions * 2 / pos.VolumeInUnits);
+                                ModifyPositionAsync(pos, stopLoss, null);
+                            }
+                        }
+
+                        break;
                     }
-                }
-                else if (position.TradeType == TradeType.Sell )
-                {
-                    double price = position.EntryPrice + position.EntryPrice - position.StopLoss.Value - position.Commissions;
-                    if (Symbol.Ask<=price)
+                    case TradeType.Sell:
                     {
-                    ClosePosition(position);
+                        double price = position.EntryPrice + position.EntryPrice - position.StopLoss.Value + position.Commissions * 2 / position.VolumeInUnits;
+                        if (Symbol.Ask <= price)
+                        {
+                            ClosePositionAsync(position);
+                            var pos = Positions.FindAll(position.Label, Symbol).FirstOrDefault(c => c.Comment == HalfComment);
+                            if (pos != null)
+                            {
+                                var stopLoss = Math.Min(emaData + EmaStopLossPip * Symbol.PipSize, pos.EntryPrice + pos.Commissions * 2 / pos.VolumeInUnits);
+                                ModifyPositionAsync(pos, stopLoss, null);
+                            }
+                        }
 
+                        break;
                     }
+                    default:
+                        break;
                 }
             }
             else
@@ -176,56 +153,27 @@ namespace cRobots
                 {
                     if (position.StopLoss == null)
                     {
-                        result = ClosePosition(position);
+                        ClosePositionAsync(position);
                         return;
                     }
-                    var emaData = ema.Result.Last(1);
+
                     double stopLoss;
-                    if (position.TradeType == TradeType.Buy)
+                    switch (position.TradeType)
                     {
-                        var stopLoss1 = emaData - EmaStopLossPip * Symbol.PipSize;
-                        var stopLoss2 = position.EntryPrice + HalfStopLossPip * Symbol.PipSize;
-
-                        stopLoss = Math.Max(stopLoss1, stopLoss2);
-
+                        case TradeType.Buy:
+                            stopLoss = Math.Max(emaData - EmaStopLossPip * Symbol.PipSize,
+                                position.EntryPrice - position.Commissions * 2 / position.VolumeInUnits);
+                            ModifyPositionAsync(position, stopLoss, null);
+                            break;
+                        case TradeType.Sell:
+                            stopLoss = Math.Min(emaData + EmaStopLossPip * Symbol.PipSize,
+                                position.EntryPrice + position.Commissions * 2 / position.VolumeInUnits);
+                            ModifyPositionAsync(position, stopLoss, null);
+                            break;
+                        default:
+                            break;
                     }
-                    else
-                    {
-                        var stopLoss1 = emaData + EmaStopLossPip * Symbol.PipSize;
-                        var stopLoss2 = position.EntryPrice - HalfStopLossPip * Symbol.PipSize;
-
-                        stopLoss = Math.Min(stopLoss1, stopLoss2);
-                    }
-
-                    result = ModifyPosition(position, stopLoss, null);
                 }
-            }
-
-
-            if (result == null || result.IsSuccessful)
-                return;
-
-
-            switch (result.Error)
-            {
-                case ErrorCode.TechnicalError:
-                    break;
-                case ErrorCode.BadVolume:
-                    break;
-                case ErrorCode.NoMoney:
-                    break;
-                case ErrorCode.MarketClosed:
-                    break;
-                case ErrorCode.Disconnected:
-                    break;
-                case ErrorCode.EntityNotFound:
-                    break;
-                case ErrorCode.Timeout:
-                    break;
-                case null:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
             }
         }
 
